@@ -79,5 +79,15 @@ export function TelegramLogin({ onSuccess, compact = false }: Props) {
     );
   }
 
-  return <div ref={containerRef} />;
+  // Telegram injects an <iframe> into this div asynchronously (after the
+  // script loads via postMessage), not synchronously on script.onload.
+  // Without explicit sizing, an empty div inside a flex container collapses
+  // to 0x0 and never grows once the iframe lands, making the button
+  // invisible even though the script loaded successfully.
+  return (
+    <div
+      ref={containerRef}
+      className={`relative z-10 inline-block ${compact ? "min-h-[36px] min-w-[140px]" : "min-h-[40px] min-w-[180px]"}`}
+    />
+  );
 }
