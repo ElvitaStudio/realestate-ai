@@ -37,7 +37,12 @@ async def get_current_user(
 
 @router.post("/telegram")
 async def telegram_login(data: TelegramAuthData, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
-    raw = data.model_dump()
+    # exclude_none=True is required: Telegram omits optional fields (last_name,
+    # username, photo_url) entirely when absent, rather than sending them as
+    # null. Including them as "field=None" corrupts the data_check_string and
+    # makes the HMAC verification fail for every user who lacks one of these
+    # fields (e.g. no username set), regardless of a correct BOT_TOKEN.
+    raw = data.model_dump(exclude_none=True)
     if not verify_telegram_auth(raw):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Telegram auth data")
 
