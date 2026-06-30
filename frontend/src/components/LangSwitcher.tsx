@@ -14,12 +14,12 @@ export function LangSwitcher({ current, onChange }: Props) {
   };
 
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-1 shrink-0">
       {LANGUAGES.map((l) => (
         <button
           key={l.code}
           onClick={() => handleChange(l.code)}
-          className={`px-2 py-1 text-xs rounded font-medium transition-colors ${
+          className={`px-2 py-1 text-xs rounded font-medium transition-colors whitespace-nowrap ${
             current === l.code
               ? "bg-gold text-black"
               : "text-gray-400 hover:text-white"

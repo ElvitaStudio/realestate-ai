@@ -21,15 +21,15 @@ export function UsageCounter({ used, limit, isPremium, t }: Props) {
   const pct = Math.min(100, (used / limit) * 100);
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-gray-300">
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="text-sm text-gray-300 whitespace-nowrap shrink-0">
         {t.dashboard.generationsLeft}:{" "}
         <span className={remaining === 0 ? "text-red-400 font-bold" : "text-gold font-bold"}>
           {remaining}
         </span>
         /{limit}
       </span>
-      <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+      <div className="w-12 sm:w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden shrink-0">
         <div
           className="h-full bg-gold transition-all"
           style={{ width: `${pct}%` }}

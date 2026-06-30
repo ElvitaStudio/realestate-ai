@@ -67,22 +67,38 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <header className="sticky top-0 z-20 bg-gray-950/90 backdrop-blur border-b border-gray-800">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="font-bold text-gold text-xl">RealEstate AI</Link>
-          <nav className="hidden md:flex items-center gap-4 text-sm text-gray-400">
-            <Link href="/dashboard" className="text-white font-medium">{t.nav.dashboard}</Link>
-            <Link href="/history" className="hover:text-white transition-colors">{t.nav.history}</Link>
-            <Link href="/billing" className="hover:text-white transition-colors">{t.nav.billing}</Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <UsageCounter
-              used={user.generations_used}
-              limit={user.generations_limit}
-              isPremium={user.is_premium}
-              t={t}
-            />
-            <LangSwitcher current={lang} onChange={handleLangChange} />
-            <div className="flex items-center gap-2">
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          {/* Row 1: logo, nav (desktop), avatar/logout — always a single row */}
+          <div className="flex items-center justify-between gap-3">
+            <Link href="/" className="font-bold text-gold text-xl shrink-0">RealEstate AI</Link>
+
+            <nav className="hidden md:flex items-center gap-4 text-sm text-gray-400">
+              <Link href="/dashboard" className="text-white font-medium">{t.nav.dashboard}</Link>
+              <Link href="/history" className="hover:text-white transition-colors">{t.nav.history}</Link>
+              <Link href="/billing" className="hover:text-white transition-colors">{t.nav.billing}</Link>
+            </nav>
+
+            {/* Desktop: usage counter + lang switcher + avatar/logout inline */}
+            <div className="hidden md:flex items-center gap-3">
+              <UsageCounter
+                used={user.generations_used}
+                limit={user.generations_limit}
+                isPremium={user.is_premium}
+                t={t}
+              />
+              <LangSwitcher current={lang} onChange={handleLangChange} />
+              <div className="flex items-center gap-2">
+                {user.photo_url && (
+                  <img src={user.photo_url} alt="avatar" className="w-8 h-8 rounded-full" />
+                )}
+                <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-white transition-colors">
+                  {t.nav.logout}
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile: only avatar/logout stay on row 1 next to the logo */}
+            <div className="flex md:hidden items-center gap-2 shrink-0">
               {user.photo_url && (
                 <img src={user.photo_url} alt="avatar" className="w-8 h-8 rounded-full" />
               )}
@@ -90,6 +106,17 @@ export default function DashboardPage() {
                 {t.nav.logout}
               </button>
             </div>
+          </div>
+
+          {/* Row 2 (mobile only): usage counter + lang switcher, never overflow */}
+          <div className="flex md:hidden items-center justify-between gap-3 mt-2">
+            <UsageCounter
+              used={user.generations_used}
+              limit={user.generations_limit}
+              isPremium={user.is_premium}
+              t={t}
+            />
+            <LangSwitcher current={lang} onChange={handleLangChange} />
           </div>
         </div>
       </header>
