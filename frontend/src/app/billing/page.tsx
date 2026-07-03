@@ -4,43 +4,79 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getT, type Lang } from "@/lib/i18n";
 import { getLang, setLang, getToken } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api, type User, type SubscriptionStatus } from "@/lib/api";
 import { LangSwitcher } from "@/components/LangSwitcher";
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-gray-600 text-white text-sm px-5 py-3 rounded-xl shadow-xl">
+      {message}
+    </div>
+  );
+}
+
+function CardModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+        <div className="text-2xl mb-3">🔧</div>
+        <h2 className="text-lg font-bold text-white mb-2">В разработке</h2>
+        <p className="text-gray-400 text-sm mb-6">
+          Оплата картой скоро будет доступна. Используйте Telegram Stars.
+        </p>
+        <button
+          onClick={onClose}
+          className="w-full py-3 rounded-xl bg-gray-700 text-white font-semibold hover:bg-gray-600 transition-colors"
+        >
+          Понятно
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function BillingPage() {
   const [lang, setLangState] = useState<Lang>("ru");
-  const [status, setStatus] = useState<{ is_premium: boolean; subscription_expires_at: string | null } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
   const router = useRouter();
   const t = getT(lang);
 
   useEffect(() => {
     if (!getToken()) { router.push("/"); return; }
     setLangState(getLang() as Lang);
-    api.billing.status().then(setStatus).catch(() => router.push("/"));
+    Promise.all([api.auth.me(), api.stars.subscriptionStatus()])
+      .then(([u, s]) => { setUser(u); setStatus(s); })
+      .catch(() => { router.push("/"); });
   }, [router]);
 
   const handleLangChange = (l: Lang) => { setLang(l); setLangState(l); };
 
-  const handleSubscribe = async () => {
+  const handleStarsPay = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const origin = window.location.origin;
-      const result = await api.billing.createInvoice(
-        `${origin}/billing?success=1`,
-        `${process.env.NEXT_PUBLIC_API_URL}/billing/webhook`,
-      );
-      window.location.href = result.invoice_url;
-    } catch (err) {
-      console.error(err);
+      await api.stars.createInvoice(user.id);
+      setToast("⭐ Счёт отправлен в ваш Telegram!");
+    } catch {
+      setToast("Ошибка. Попробуйте ещё раз.");
     } finally {
       setLoading(false);
     }
   };
 
-  const expiresDate = status?.subscription_expires_at
-    ? new Date(status.subscription_expires_at).toLocaleDateString(lang === "en" ? "en-US" : "ru-RU", {
-        day: "2-digit", month: "long", year: "numeric",
+  const expiresFormatted = status?.expires_at
+    ? new Date(status.expires_at).toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
       })
     : null;
 
@@ -58,39 +94,72 @@ export default function BillingPage() {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto px-4 py-12">
-        <h1 className="text-2xl font-bold mb-8">{t.billing.title}</h1>
+      <main className="max-w-md mx-auto px-4 py-12 space-y-6">
+        <h1 className="text-2xl font-bold">{t.billing.title}</h1>
 
         {status && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <>
+            {/* Current status block */}
             {status.is_premium ? (
-              <div>
-                <div className="flex items-center gap-2 text-gold font-semibold">
-                  <span>⭐</span>
-                  <span>Premium</span>
+              <div className="bg-green-950/40 border border-green-700 rounded-xl p-4 flex items-center gap-3">
+                <span className="text-green-400 text-xl">✅</span>
+                <div>
+                  <p className="text-green-300 font-semibold text-sm">Premium активен</p>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    до {expiresFormatted} · осталось {status.days_left} дн.
+                  </p>
                 </div>
-                <p className="text-gray-400 text-sm mt-2">
-                  {t.billing.active}: <span className="text-white">{expiresDate}</span>
-                </p>
               </div>
             ) : (
-              <div>
-                <p className="text-gray-400 text-sm mb-5">{t.billing.inactive}</p>
-                <button
-                  onClick={handleSubscribe}
-                  disabled={loading}
-                  className="w-full py-3 rounded-lg bg-gold text-black font-semibold hover:bg-gold-light disabled:opacity-50 transition-colors"
-                >
-                  {loading ? "..." : t.billing.subscribe}
-                </button>
-                <p className="text-xs text-gray-500 mt-3 text-center">
-                  Оплата через Monobank · Безопасно
-                </p>
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 flex items-center gap-3">
+                <span className="text-gray-400 text-xl">🆓</span>
+                <div>
+                  <p className="text-gray-300 font-semibold text-sm">Бесплатный тариф</p>
+                  {user && (
+                    <p className="text-gray-500 text-xs mt-0.5">
+                      Использовано {user.generations_used}/{user.generations_limit} генераций
+                    </p>
+                  )}
+                </div>
               </div>
             )}
-          </div>
+
+            {/* Telegram Stars payment */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gold text-lg">⭐</span>
+                <h2 className="text-white font-semibold">Оплата через Telegram Stars</h2>
+              </div>
+              <p className="text-gray-400 text-sm mb-5">750 Stars ≈ $15 / месяц</p>
+              <button
+                onClick={handleStarsPay}
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-gold text-black font-semibold hover:bg-gold-light disabled:opacity-50 transition-colors"
+              >
+                {loading ? "Отправка..." : "⭐ Оплатить через Telegram"}
+              </button>
+            </div>
+
+            {/* Card payment stub */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-500 text-lg">💳</span>
+                <h2 className="text-gray-500 font-semibold">Оплата картой</h2>
+              </div>
+              <p className="text-gray-600 text-sm mb-5">Скоро будет доступно</p>
+              <button
+                onClick={() => setShowCardModal(true)}
+                className="w-full py-3 rounded-xl bg-gray-700 text-gray-500 font-semibold cursor-pointer transition-colors hover:bg-gray-600"
+              >
+                💳 Оплатить картой
+              </button>
+            </div>
+          </>
         )}
       </main>
+
+      {showCardModal && <CardModal onClose={() => setShowCardModal(false)} />}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

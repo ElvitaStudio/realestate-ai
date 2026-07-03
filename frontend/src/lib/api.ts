@@ -47,6 +47,12 @@ export type GenerationResult = {
   generations_limit: number;
 };
 
+export type SubscriptionStatus = {
+  is_premium: boolean;
+  expires_at: string | null;
+  days_left: number;
+};
+
 export type HistoryItem = {
   id: number;
   tool_type: string;
@@ -93,6 +99,14 @@ export const api = {
       }),
     status: () =>
       request<{ is_premium: boolean; subscription_expires_at: string | null }>("/billing/status"),
+  },
+  stars: {
+    createInvoice: (userId: number) =>
+      request<{ ok: boolean }>("/stars/create-invoice", {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+      }),
+    subscriptionStatus: () => request<SubscriptionStatus>("/stars/subscription-status"),
   },
 };
 

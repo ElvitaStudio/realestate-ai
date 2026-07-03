@@ -4,19 +4,35 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getT, type Lang } from "@/lib/i18n";
 import { getLang, setLang, getToken, clearToken } from "@/lib/auth";
-import { api, type User, type GenerationResult } from "@/lib/api";
+import { api, type User, type GenerationResult, type SubscriptionStatus } from "@/lib/api";
 import { TOOLS, type ToolConfig } from "@/lib/toolsConfig";
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { UsageCounter } from "@/components/UsageCounter";
 import { ToolCard } from "@/components/ToolCard";
 import { Sidebar } from "@/components/Sidebar";
 import { UpgradeModal } from "@/components/UpgradeModal";
+import { SubscriptionExpiredModal } from "@/components/SubscriptionExpiredModal";
+
+const DISMISS_KEY = "sub_modal_dismissed_at";
+const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
+
+function shouldShowModal(daysLeft: number): boolean {
+  if (daysLeft <= 0) return true;
+  if (daysLeft > 3) return false;
+  const raw = typeof window !== "undefined" ? localStorage.getItem(DISMISS_KEY) : null;
+  if (!raw) return true;
+  return Date.now() - Number(raw) > DISMISS_TTL_MS;
+}
 
 export default function DashboardPage() {
   const [lang, setLangState] = useState<Lang>("ru");
   const [user, setUser] = useState<User | null>(null);
   const [activeTool, setActiveTool] = useState<ToolConfig | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [renewLoading, setRenewLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const router = useRouter();
   const t = getT(lang);
 
@@ -27,10 +43,20 @@ export default function DashboardPage() {
       return;
     }
     setLangState(getLang() as Lang);
-    api.auth.me().then(setUser).catch(() => {
-      clearToken();
-      router.push("/");
-    });
+    api.auth.me()
+      .then(setUser)
+      .catch(() => { clearToken(); router.push("/"); });
+    api.stars.subscriptionStatus()
+      .then((s) => {
+        setSubStatus(s);
+        if (s.is_premium && shouldShowModal(s.days_left)) {
+          setShowSubModal(true);
+        }
+        if (!s.is_premium && s.days_left <= 0 && s.expires_at) {
+          setShowSubModal(true);
+        }
+      })
+      .catch(() => {});
   }, [router]);
 
   const handleLangChange = (l: Lang) => {
@@ -55,6 +81,25 @@ export default function DashboardPage() {
     setActiveTool(null);
     setShowUpgrade(true);
   }, []);
+
+  const handleRenew = async () => {
+    if (!user) return;
+    setRenewLoading(true);
+    try {
+      await api.stars.createInvoice(user.id);
+      setShowSubModal(false);
+      setToast("⭐ Счёт отправлен в ваш Telegram!");
+    } catch {
+      setToast("Ошибка. Попробуйте ещё раз.");
+    } finally {
+      setRenewLoading(false);
+    }
+  };
+
+  const handleDismissSubModal = () => {
+    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    setShowSubModal(false);
+  };
 
   if (!user) {
     return (
@@ -146,6 +191,24 @@ export default function DashboardPage() {
 
       {showUpgrade && (
         <UpgradeModal t={t} onClose={() => setShowUpgrade(false)} />
+      )}
+
+      {showSubModal && subStatus && subStatus.expires_at && (
+        <SubscriptionExpiredModal
+          daysLeft={subStatus.days_left}
+          expiresAt={subStatus.expires_at}
+          onRenew={handleRenew}
+          onDismiss={subStatus.days_left > 0 ? handleDismissSubModal : undefined}
+        />
+      )}
+
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-gray-600 text-white text-sm px-5 py-3 rounded-xl shadow-xl"
+          onClick={() => setToast(null)}
+        >
+          {toast}
+        </div>
       )}
     </div>
   );
