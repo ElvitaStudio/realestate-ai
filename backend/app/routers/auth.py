@@ -73,12 +73,15 @@ async def telegram_login(data: TelegramAuthData, db: AsyncSession = Depends(get_
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    from datetime import datetime
+    from datetime import date, datetime
     is_premium_active = (
         current_user.is_premium
         and current_user.subscription_expires_at
         and current_user.subscription_expires_at > datetime.utcnow()
     )
+    daily_used = current_user.daily_generations_used or 0
+    if current_user.daily_reset_date != date.today():
+        daily_used = 0
     return {
         "id": current_user.id,
         "telegram_id": current_user.telegram_id,
@@ -87,7 +90,7 @@ async def get_me(current_user: User = Depends(get_current_user)) -> dict[str, An
         "last_name": current_user.last_name,
         "photo_url": current_user.photo_url,
         "is_premium": is_premium_active,
-        "generations_used": current_user.generations_used,
-        "generations_limit": current_user.generations_limit,
+        "generations_used": daily_used,
+        "generations_limit": 5,
         "subscription_expires_at": current_user.subscription_expires_at,
     }

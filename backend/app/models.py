@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, func
+from datetime import date, datetime
+from sqlalchemy import Date, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -17,6 +17,8 @@ class User(Base):
     generations_used: Mapped[int] = mapped_column(Integer, default=0)
     generations_limit: Mapped[int] = mapped_column(Integer, default=5)
     subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    daily_generations_used: Mapped[int] = mapped_column(Integer, default=0)
+    daily_reset_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
     generations: Mapped[list["Generation"]] = relationship("Generation", back_populates="user")

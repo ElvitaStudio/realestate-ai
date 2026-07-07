@@ -40,7 +40,7 @@ const translations = {
     },
     dashboard: {
       title: "Инструменты",
-      generationsLeft: "Осталось генераций",
+      generationsLeft: "Осталось сегодня",
       unlimited: "Безлимит",
       upgradeTitle: "Лимит исчерпан",
       upgradeDesc: "Вы использовали все 5 бесплатных генераций. Перейдите на Premium для безлимитного доступа.",
@@ -176,7 +176,7 @@ const translations = {
     },
     dashboard: {
       title: "Інструменти",
-      generationsLeft: "Залишилось генерацій",
+      generationsLeft: "Залишилось сьогодні",
       unlimited: "Безліміт",
       upgradeTitle: "Ліміт вичерпано",
       upgradeDesc: "Ви використали всі 5 безкоштовних генерацій. Перейдіть на Premium для безлімітного доступу.",
@@ -312,7 +312,7 @@ const translations = {
     },
     dashboard: {
       title: "Tools",
-      generationsLeft: "Generations left",
+      generationsLeft: "Left today",
       unlimited: "Unlimited",
       upgradeTitle: "Limit reached",
       upgradeDesc: "You've used all 5 free generations. Upgrade to Premium for unlimited access.",
@@ -448,7 +448,7 @@ const translations = {
     },
     dashboard: {
       title: "Инструменти",
-      generationsLeft: "Оставащи генерации",
+      generationsLeft: "Останали днес",
       unlimited: "Неограничено",
       upgradeTitle: "Лимитът е изчерпан",
       upgradeDesc: "Използвахте всичките 5 безплатни генерации. Преминете към Premium за неограничен достъп.",

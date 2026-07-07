@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -13,18 +13,33 @@ from app.prompts import description, instagram, telegram_post, cold_call, incomi
 router = APIRouter(prefix="/generate", tags=["generate"])
 
 LANGUAGE_CHOICES = {"ru", "ua", "en", "bg"}
+DAILY_FREE_LIMIT = 5
 
 
-def _check_freemium(user: User) -> None:
-    is_premium_active = (
+def _is_premium_active(user: User) -> bool:
+    return bool(
         user.is_premium
         and user.subscription_expires_at
         and user.subscription_expires_at > datetime.utcnow()
     )
-    if not is_premium_active and user.generations_used >= user.generations_limit:
+
+
+async def _check_and_reset_daily(user: User, db: AsyncSession) -> None:
+    today = date.today()
+    if user.daily_reset_date != today:
+        user.daily_generations_used = 0
+        user.daily_reset_date = today
+        await db.flush()
+
+
+async def _check_freemium(user: User, db: AsyncSession) -> None:
+    if _is_premium_active(user):
+        return
+    await _check_and_reset_daily(user, db)
+    if user.daily_generations_used >= DAILY_FREE_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Generation limit reached. Please upgrade to Premium.",
+            detail="Дневной лимит исчерпан. Обновитесь до Premium или возвращайтесь завтра.",
         )
 
 
@@ -40,6 +55,8 @@ async def _save_generation(
     )
     db.add(gen)
     user.generations_used = user.generations_used + 1
+    if not _is_premium_active(user):
+        user.daily_generations_used = user.daily_generations_used + 1
     await db.commit()
     await db.refresh(gen)
     return gen
@@ -104,11 +121,12 @@ def _validate_language(lang: str) -> str:
 
 
 def _generation_response(gen: Generation, user: User) -> dict[str, Any]:
+    is_premium = _is_premium_active(user)
     return {
         "id": gen.id,
         "output_text": gen.output_text,
-        "generations_used": user.generations_used,
-        "generations_limit": user.generations_limit,
+        "generations_used": user.daily_generations_used if not is_premium else 0,
+        "generations_limit": DAILY_FREE_LIMIT if not is_premium else 999999,
     }
 
 
@@ -118,7 +136,7 @@ async def generate_description(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = description.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -132,7 +150,7 @@ async def generate_instagram(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = instagram.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -146,7 +164,7 @@ async def generate_telegram(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = telegram_post.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -160,7 +178,7 @@ async def generate_cold_call(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = cold_call.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -174,7 +192,7 @@ async def generate_incoming_call(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = incoming_call.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -188,7 +206,7 @@ async def generate_objection(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = objections.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
@@ -202,7 +220,7 @@ async def generate_followup(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _check_freemium(current_user)
+    await _check_freemium(current_user, db)
     lang = _validate_language(req.language)
     prompt = followup.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
