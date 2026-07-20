@@ -7,7 +7,8 @@ export type ToolId =
   | "cold-call"
   | "incoming-call"
   | "objection"
-  | "followup";
+  | "followup"
+  | "photo-description";
 
 export type FieldType =
   | "select"
@@ -16,7 +17,8 @@ export type FieldType =
   | "number"
   | "checkbox"
   | "checkboxGroup"
-  | "language";
+  | "language"
+  | "photo";
 
 export type FieldConfig = {
   name: string;
@@ -231,6 +233,37 @@ export const TOOLS: ToolConfig[] = [
         ],
       },
       { name: "client_feedback", labelKey: "form.clientFeedback", type: "textarea", defaultValue: "" },
+    ],
+  },
+  {
+    id: "photo-description",
+    icon: "📷",
+    titleKey: "tools.photoDescription",
+    descKey: "tools.photoDescriptionDesc",
+    apiFn: (data: unknown) => {
+      const d = data as { photo?: File; property_type?: string; additional?: string; language?: string };
+      if (!d.photo) return Promise.reject(new Error("No photo"));
+      return api.generate.photoDescription({
+        photo: d.photo,
+        property_type: d.property_type ?? "apartment",
+        additional: d.additional ?? "",
+        language: d.language ?? "ru",
+      });
+    },
+    fields: [
+      { name: "photo", labelKey: "form.uploadPhoto", type: "photo", defaultValue: null },
+      {
+        name: "property_type",
+        labelKey: "form.propertyType",
+        type: "select",
+        defaultValue: "apartment",
+        options: [
+          { value: "apartment", labelKey: "form.apartment" },
+          { value: "house", labelKey: "form.house" },
+          { value: "commercial", labelKey: "form.commercial" },
+        ],
+      },
+      { name: "additional", labelKey: "form.additional", type: "textarea", defaultValue: "" },
     ],
   },
 ];

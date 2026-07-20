@@ -17,8 +17,7 @@ class User(Base):
     generations_used: Mapped[int] = mapped_column(Integer, default=0)
     generations_limit: Mapped[int] = mapped_column(Integer, default=5)
     subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    daily_generations_used: Mapped[int] = mapped_column(Integer, default=0)
-    daily_reset_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    monthly_reset_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
     generations: Mapped[list["Generation"]] = relationship("Generation", back_populates="user")

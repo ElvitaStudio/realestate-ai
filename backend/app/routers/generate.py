@@ -1,19 +1,21 @@
+import base64
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 from typing import Any
 
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.database import get_db
-from app.models import User, Generation
+from app.models import Generation, User
+from app.prompts import cold_call, description, followup, incoming_call, instagram, objections, photo_description, telegram_post
 from app.routers.auth import get_current_user
-from app.services.claude_service import generate_text
-from app.prompts import description, instagram, telegram_post, cold_call, incoming_call, objections, followup
+from app.services.claude_service import generate_text, generate_with_image
 
 router = APIRouter(prefix="/generate", tags=["generate"])
 
 LANGUAGE_CHOICES = {"ru", "ua", "en", "bg"}
-DAILY_FREE_LIMIT = 5
+MONTHLY_FREE_LIMIT = 100
 
 
 def _is_premium_active(user: User) -> bool:
@@ -24,22 +26,28 @@ def _is_premium_active(user: User) -> bool:
     )
 
 
-async def _check_and_reset_daily(user: User, db: AsyncSession) -> None:
+def _first_day_of_month() -> date:
     today = date.today()
-    if user.daily_reset_date != today:
-        user.daily_generations_used = 0
-        user.daily_reset_date = today
+    return today.replace(day=1)
+
+
+async def _check_and_reset_monthly(user: User, db: AsyncSession) -> None:
+    first_of_month = _first_day_of_month()
+    if user.monthly_reset_date is None or user.monthly_reset_date < first_of_month:
+        user.generations_used = 0
+        user.generations_limit = MONTHLY_FREE_LIMIT
+        user.monthly_reset_date = first_of_month
         await db.flush()
 
 
 async def _check_freemium(user: User, db: AsyncSession) -> None:
     if _is_premium_active(user):
         return
-    await _check_and_reset_daily(user, db)
-    if user.daily_generations_used >= DAILY_FREE_LIMIT:
+    await _check_and_reset_monthly(user, db)
+    if user.generations_used >= user.generations_limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Дневной лимит исчерпан. Обновитесь до Premium или возвращайтесь завтра.",
+            detail="Месячный лимит исчерпан. Обновитесь до Premium или возвращайтесь в следующем месяце.",
         )
 
 
@@ -55,8 +63,6 @@ async def _save_generation(
     )
     db.add(gen)
     user.generations_used = user.generations_used + 1
-    if not _is_premium_active(user):
-        user.daily_generations_used = user.daily_generations_used + 1
     await db.commit()
     await db.refresh(gen)
     return gen
@@ -125,8 +131,8 @@ def _generation_response(gen: Generation, user: User) -> dict[str, Any]:
     return {
         "id": gen.id,
         "output_text": gen.output_text,
-        "generations_used": user.daily_generations_used if not is_premium else 0,
-        "generations_limit": DAILY_FREE_LIMIT if not is_premium else 999999,
+        "generations_used": user.generations_used if not is_premium else 0,
+        "generations_limit": user.generations_limit if not is_premium else 999999,
     }
 
 
@@ -225,4 +231,49 @@ async def generate_followup(
     prompt = followup.build_prompt(req.model_dump(exclude={"language"}), lang)
     output = await generate_text(prompt)
     gen = await _save_generation(db, current_user, "followup", req.model_dump(), output, lang)
+    return _generation_response(gen, current_user)
+
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": "image/jpeg",
+    "image/jpg": "image/jpeg",
+    "image/png": "image/png",
+    "image/webp": "image/webp",
+}
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/photo-description")
+async def generate_photo_description(
+    photo: UploadFile = File(...),
+    property_type: str = Form(default="apartment"),
+    additional: str = Form(default=""),
+    language: str = Form(default="ru"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    await _check_freemium(current_user, db)
+
+    content_type = (photo.content_type or "").lower()
+    media_type = ALLOWED_IMAGE_TYPES.get(content_type)
+    if not media_type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Поддерживаются форматы: JPEG, PNG, WebP.",
+        )
+
+    image_bytes = await photo.read()
+    if len(image_bytes) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Размер файла не должен превышать 5 МБ.",
+        )
+
+    lang = _validate_language(language)
+    image_b64 = base64.b64encode(image_bytes).decode()
+    prompt = photo_description.build_prompt(property_type, lang, additional)
+    output = await generate_with_image(prompt, image_b64, media_type)
+
+    input_data = {"property_type": property_type, "additional": additional, "language": lang}
+    gen = await _save_generation(db, current_user, "photo-description", input_data, output, lang)
     return _generation_response(gen, current_user)

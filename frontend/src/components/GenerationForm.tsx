@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { ToolConfig } from "@/lib/toolsConfig";
 import type { Translations, Lang } from "@/lib/i18n";
 import type { GenerationResult } from "@/lib/api";
@@ -33,6 +33,20 @@ export function GenerationForm({ tool, t, lang, onSuccess, onLimitReached }: Pro
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoChange = (file: File | null) => {
+    if (!file) {
+      setValue("photo", null);
+      setPhotoPreview(null);
+      return;
+    }
+    setValue("photo", file);
+    const reader = new FileReader();
+    reader.onload = (e) => setPhotoPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const setValue = (name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -155,6 +169,49 @@ export function GenerationForm({ tool, t, lang, onSuccess, onLimitReached }: Pro
                   );
                 })}
               </div>
+            </div>
+          );
+        }
+
+        if (field.type === "photo") {
+          const tForm = t.form as Record<string, string>;
+          return (
+            <div key={field.name}>
+              <label className="block text-sm text-gray-400 mb-2">{label}</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+              />
+              {photoPreview ? (
+                <div className="relative rounded-xl overflow-hidden border border-gray-700">
+                  <img src={photoPreview} alt="preview" className="w-full max-h-56 object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { handlePhotoChange(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm hover:bg-black/80"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handlePhotoChange(e.dataTransfer.files?.[0] ?? null);
+                  }}
+                  className="w-full border-2 border-dashed border-gray-600 rounded-xl py-8 px-4 flex flex-col items-center gap-2 text-gray-400 hover:border-gold hover:text-gold transition-colors cursor-pointer"
+                >
+                  <span className="text-3xl">📷</span>
+                  <span className="text-sm text-center">{tForm["dragOrClick"] ?? "Перетащите или выберите фото"}</span>
+                  <span className="text-xs text-gray-600">{tForm["photoHint"] ?? "JPG, PNG, WebP · до 5 МБ"}</span>
+                </button>
+              )}
             </div>
           );
         }

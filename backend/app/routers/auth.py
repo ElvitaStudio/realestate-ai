@@ -79,9 +79,11 @@ async def get_me(current_user: User = Depends(get_current_user)) -> dict[str, An
         and current_user.subscription_expires_at
         and current_user.subscription_expires_at > datetime.utcnow()
     )
-    daily_used = current_user.daily_generations_used or 0
-    if current_user.daily_reset_date != date.today():
-        daily_used = 0
+    # Show 0 used if the monthly counter hasn't been reset yet this month.
+    first_of_month = date.today().replace(day=1)
+    monthly_used = current_user.generations_used
+    if current_user.monthly_reset_date is None or current_user.monthly_reset_date < first_of_month:
+        monthly_used = 0
     return {
         "id": current_user.id,
         "telegram_id": current_user.telegram_id,
@@ -90,7 +92,7 @@ async def get_me(current_user: User = Depends(get_current_user)) -> dict[str, An
         "last_name": current_user.last_name,
         "photo_url": current_user.photo_url,
         "is_premium": is_premium_active,
-        "generations_used": daily_used,
-        "generations_limit": 5,
+        "generations_used": monthly_used if not is_premium_active else 0,
+        "generations_limit": current_user.generations_limit if not is_premium_active else 999999,
         "subscription_expires_at": current_user.subscription_expires_at,
     }

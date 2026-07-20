@@ -19,21 +19,24 @@ async def get_db() -> AsyncSession:
 
 
 async def _migrate_db() -> None:
-    """Add columns introduced after initial schema creation (SQLite has no IF NOT EXISTS for columns)."""
+    """Add columns introduced after initial schema creation (SQLite lacks IF NOT EXISTS for columns)."""
+    import sqlalchemy as sa
+
     new_columns = [
-        ("daily_generations_used", "INTEGER NOT NULL DEFAULT 0"),
-        ("daily_reset_date", "DATE"),
+        ("monthly_reset_date", "DATE"),
     ]
     async with engine.begin() as conn:
-        existing: list[dict] = (await conn.execute(
-            __import__("sqlalchemy").text("PRAGMA table_info(users)")
-        )).mappings().all()
+        existing = (await conn.execute(sa.text("PRAGMA table_info(users)"))).mappings().all()
         existing_names = {row["name"] for row in existing}
+
         for col_name, col_def in new_columns:
             if col_name not in existing_names:
-                await conn.execute(
-                    __import__("sqlalchemy").text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}")
-                )
+                await conn.execute(sa.text(f"ALTER TABLE users ADD COLUMN {col_name} {col_def}"))
+
+        # Ensure free users have the correct monthly limit.
+        await conn.execute(
+            sa.text("UPDATE users SET generations_limit = 100 WHERE is_premium = 0 AND generations_limit < 100")
+        )
 
 
 async def init_db() -> None:
